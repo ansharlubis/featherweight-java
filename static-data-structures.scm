@@ -1,48 +1,41 @@
 (module static-data-structures (lib "eopl.ss" "eopl")
 
-  ;; type environments and associated procedures.
-  ;; In chapter7/checked, this is in checker.scm.
-
   (require "lang.scm")
 
   (provide (all-defined-out))
 
-;;;;;;;;;;;;;;;; type environments ;;;;;;;;;;;;;;;;
+  ;;;;;;;;;;;;;;;;;;;; type environments ;;;;;;;;;;;;;;;;;;;;
 
   (define-datatype type-environment type-environment?
     (empty-tenv)
     (extend-tenv
-      (syms (list-of symbol?))
-      (vals (list-of type?))
-      (tenv type-environment?))
+     (syms (list-of symbol?))
+     (vals (list-of type?))
+     (tenv type-environment?))
     (extend-tenv-with-self-and-super
-      (self type?)
-      (super-name symbol?)
-      (saved-env type-environment?)))
+     (self type?)
+     (super-name symbol?)
+     (tenv type-environment?)))
 
   (define init-tenv
     (lambda ()
-      (extend-tenv
-        '(i v x)
-        (list (int-type) (int-type) (int-type))
-        (empty-tenv))))
+      (empty-tenv)))
 
   (define apply-tenv
     (lambda (env search-sym)
       (cases type-environment env
         (empty-tenv ()
-          (eopl:error 'apply-tenv "No type found for ~s" search-sym))
-        (extend-tenv (bvars types saved-env)
+          (eopl:error 'apply-env "No type found for ~s" search-sym))
+        (extend-tenv (bvars types saved-tenv)
           (cond
-            ((location search-sym bvars)
-             => (lambda (n) (list-ref types n)))
+            ((location search-sym bvars) => (lambda (n) (list-ref types n)))
             (else
-              (apply-tenv saved-env search-sym))))
-        (extend-tenv-with-self-and-super (self-name super-name saved-env)
+              (apply-tenv saved-tenv search-sym))))
+        (extend-tenv-with-self-and-super (self-name super-name saved-tenv)
           (case search-sym
             ((%self) self-name)
             ((%super) super-name)
-            (else (apply-tenv saved-env search-sym)))))))
+            (else (apply-tenv saved-tenv search-sym)))))))
 
   (define location
     (lambda (sym syms)
@@ -51,6 +44,5 @@
         ((eqv? sym (car syms)) 0)
         ((location sym (cdr syms)) => (lambda (n) (+ n 1)))
         (else #f))))
-
-
-)
+  
+  )

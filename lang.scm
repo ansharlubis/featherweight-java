@@ -1,19 +1,12 @@
 (module lang (lib "eopl.ss" "eopl")
-  
-  ;; grammar for the TYPED-OO language.  Based on IMPLICIT-REFS:
-  ;; plus
-  ;;   multiple-argument procedures
-  ;;   multiple-declaration letrecs, and
-  ;;   multiple-declaration lets, 
-  ;;   types a la CHECKED (not INFERRED)
-  ;;   lists of expressed values
 
+  ;; grammar for Featherweight Java
   (require "drscheme-init.scm")
-  
+
   (provide (all-defined-out))
 
-  ;;;;;;;;;;;;;;;; grammatical specification ;;;;;;;;;;;;;;;;
-  
+  ;;;;;;;;;;;;;;;;;;; grammatical specification ;;;;;;;;;;;;;;;;;;;
+
   (define the-lexical-spec
     '((whitespace (whitespace) skip)
       (comment ("%" (arbno (not #\newline))) skip)
@@ -23,128 +16,72 @@
       (number (digit (arbno digit)) number)
       (number ("-" digit (arbno digit)) number)
       ))
-  
+
   (define the-grammar
     '((program ((arbno class-decl) expression) a-program)
-
-      (expression (number) const-exp)
-      (expression
-        ("-" "(" expression "," expression ")")
-        diff-exp)
-
-      (expression
-        ("+" "(" expression "," expression ")")
-        sum-exp)
       
-      (expression
-        ("zero?" "(" expression ")")
-        zero?-exp)
-
-      (expression
-        ("if" expression "then" expression "else" expression)
-        if-exp)
-
+      ;; expressions consists of
+      ;; -variable
+      ;; -field access
+      ;; -method invocation
+      ;; -object creation
+      ;; -casting
+      
       (expression (identifier) var-exp)
 
       (expression
-        ("let" (arbno identifier "=" expression) "in" expression)
-        let-exp)   
-
-      (expression
-        ("proc" "(" (separated-list identifier ":" type ",") ")" expression)
-        proc-exp)
-
-      (expression
-        ("(" expression (arbno expression) ")")
-        call-exp)
-
-      (expression
-        ("letrec"
-          (arbno type identifier "(" (separated-list identifier ":" type ",") ")"
-            "=" expression)
-          "in" expression)
-        letrec-exp)
+       ("access" expression identifier)
+       field-access-exp)
       
       (expression
-        ("begin" expression (arbno ";" expression) "end")
-        begin-exp)
+       ("send" expression identifier
+        "(" (separated-list expression ",") ")")
+       method-call-exp)
 
       (expression
-        ("set" identifier "=" expression)
-        assign-exp)
+       ("new" identifier "(" (separated-list expression ",") ")")
+       new-object-exp)
 
-      ;; non-empty lists for typechecked version
       (expression
-        ("list" "(" expression (arbno "," expression) ")" )
-        list-exp)
+       ("cast" expression identifier)
+       cast-exp)
 
-      ;; new productions for oop
+      ;; the following expressions are only allowed in initialize
 
-      (class-decl                         
-        ("class" identifier 
-          "extends" identifier 
-          (arbno "implements" identifier)
-          (arbno "field" type identifier)
-          (arbno method-decl)
-          )
+      (expression
+       ("begin" expression (arbno ";" expression) "end")
+       begin-exp)
+
+      (expression
+       ("set" identifier "=" expression)
+       assign-exp)
+
+      (expression                                
+       ("super" identifier    "("  (separated-list expression ",") ")")
+       super-call-exp)      
+
+      ;; declarations
+
+      (class-decl
+        ("class" identifier "extends" identifier "{"
+           (arbno "field" type identifier)
+           (arbno method-decl)
+         "}")
         a-class-decl)
 
       (method-decl
-        ("method" type identifier
-          "("  (separated-list identifier  ":" type ",") ")" ; method formals
+       ("method" type identifier
+        "(" (separated-list identifier ":" type ",") ")" "{"
           expression
-          )
-        a-method-decl)
+        "}")
+       a-method-decl)
 
-      (expression 
-        ("new" identifier "(" (separated-list expression ",") ")")
-        new-object-exp)
-
-      ;; this is special-cased to prevent it from mutation
-      (expression
-        ("self")
-        self-exp)
-
-      (expression
-        ("send" expression identifier
-          "("  (separated-list expression ",") ")")
-        method-call-exp)
-
-      (expression                                
-        ("super" identifier    "("  (separated-list expression ",") ")")
-        super-call-exp)
-
-      ;; new productions for typed-oo
-
-      (class-decl
-        ("interface" identifier (arbno abstract-method-decl))
-        an-interface-decl)
-
-
-      (abstract-method-decl
-        ("method" type identifier 
-          "("  (separated-list identifier ":" type ",") ")" )
-        an-abstract-method-decl)
-
-      (expression
-        ("cast" expression identifier)
-        cast-exp)
-
-      (expression
-        ("instanceof" expression identifier)
-        instanceof-exp)
-
-      (type ("int") int-type)             
-      (type ("bool") bool-type)           
-      (type ("void") void-type)      
+      ;; types
       (type                               
         ("(" (separated-list type "*") "->" type ")")
         proc-type)
-      (type
-        ("listof" type)
-        list-type)
-
-      (type (identifier) class-type) ;; new for typed oo
+      (type ("void") void-type)
+      (type (identifier) class-type)
 
       ))
 
@@ -160,8 +97,8 @@
   
   (define just-scan
     (sllgen:make-string-scanner the-lexical-spec the-grammar))
-  
-;;;;;;;;;;;;;;;; syntactic operations on types ;;;;;;;;;;;;;;;;
+
+  ;;;;;;;;;;;;;;;; syntactic operations on types ;;;;;;;;;;;;;;;;
 
   (define type->class-name
     (lambda (ty)
@@ -180,11 +117,8 @@
   (define type-to-external-form
     (lambda (ty)
       (cases type ty
-        (int-type () 'int)
-        (bool-type () 'bool)
         (void-type () 'void)
         (class-type (name) name)
-        (list-type (ty) (list 'listof (type-to-external-form ty)))
         (proc-type (arg-types result-type)
           (append
             (formal-types-to-external-form arg-types)
@@ -201,7 +135,4 @@
             (type-to-external-form (car types))
             (cons '*
               (formal-types-to-external-form (cdr types))))))))
-
-
-
   )
