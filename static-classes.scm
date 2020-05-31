@@ -5,14 +5,19 @@
 
   (provide (all-defined-out))
 
-  ;;;;;;;;;;;;;;;;;; static classes ;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;; method type environments ;;;;;;;;;;;;;;;;
+
+  ;; a method tenv looks like ((method-name type) ...)
+  ;; each method will have a proc-type
+
+  ;;;;;;;;;;;;;;;; static classes ;;;;;;;;;;;;;;;;
 
   (define identifier? symbol?)
 
   (define method-tenv?
-    (list-of
+    (list-of 
       (lambda (p)
-        (and
+        (and 
           (pair? p)
           (symbol? (car p))
           (type? (cadr p))))))
@@ -34,11 +39,13 @@
   ;; class-name * id -> type OR fail
   (define find-method-type
     (lambda (class-name id)
-      (let ((m (maybe-find-method-type
-                (class-name->method-tenv class-name)
-                id)))
+      (let ((m (maybe-find-method-type 
+                 (static-class->method-tenv (lookup-static-class class-name))
+                 id)))
         (if m m
-            (eopl:error 'find-method "unknown method ~s in class ~s" id class-name)))))
+          (eopl:error 'find-method 
+            "unknown method ~s in class ~s"
+            id class-name)))))
   
   ;;;;;;;;;;;;;;;; the static class environment ;;;;;;;;;;;;;;;;
 
@@ -48,16 +55,15 @@
 
   (define is-static-class?
     (lambda (name)
-      (or
-        (assq name the-static-class-env)
-        (equal? name 'object))))
+      (assq name the-static-class-env)))
 
-  (define lookup-static-class
+  (define lookup-static-class                    
     (lambda (name)
       (cond
-        ((assq name the-static-class-env) => (lambda (pair) (cadr pair)))
-        (else
-           (eopl:error 'lookup-static-class "unknown class: ~s" name)))))
+        ((assq name the-static-class-env)
+         => (lambda (pair) (cadr pair)))
+        (else (eopl:error 'lookup-static-class
+                "Unknown class: ~s" name)))))
 
   (define empty-the-static-class-env!
     (lambda ()
@@ -67,8 +73,9 @@
     (lambda (name sc)
       (set! the-static-class-env
         (cons
-           (list name sc)
-           the-static-class-env))))
+          (list name sc)
+          the-static-class-env))))
+
 
   ;;;;;;;;;;;;;;;; class declarations, etc. ;;;;;;;;;;;;;;;;
 
@@ -76,34 +83,46 @@
   ;; the-static-class-env.
 
   ;; initialize-static-class-env! : Listof(ClassDecl) -> Unspecified
+  ;; Page: 362
   (define initialize-static-class-env!
     (lambda (c-decls)
       (empty-the-static-class-env!)
+      (add-static-class-binding!
+        'object (a-static-class #f '() '() '()))
       (for-each add-class-decl-to-static-class-env! c-decls)))
 
-
   ;; add-class-decl-to-static-class-env! : ClassDecl -> Unspecified
+  ;; Page 366
   (define add-class-decl-to-static-class-env!
     (lambda (c-decl)
-      (cases class-decl c-decl
-        (a-class-decl (c-name s-name f-types f-names m-decls)
-          (let ((super-f-names (class-name->field-names s-name))
-                (super-f-types (class-name->field-types s-name)))
+      (cases class-decl c-decl 
+        (a-class-decl (c-name s-name
+                        f-types f-names cons-decl m-decls)
+          (let ((super-f-names
+                  (static-class->field-names
+                    (lookup-static-class s-name)))
+                (super-f-types
+                  (static-class->field-types
+                    (lookup-static-class s-name))))
             (check-no-shadowing! super-f-names f-names c-name)
             (let ((f-names (append super-f-names f-names))
                   (f-types (append super-f-types f-types))
                   (method-tenv
-                    (let ((local-method-tenv (method-decls->method-tenv m-decls)))
-                      (check-no-dups! (map car local-method-tenv) c-name)
-                      (merge-method-tenvs (class-name->method-tenv s-name) local-method-tenv))))
+                    (let ((local-method-tenv
+                            (method-decls->method-tenv m-decls)))
+                      (check-no-dups!
+                        (map car local-method-tenv) c-name)
+                      (merge-method-tenvs
+                        (static-class->method-tenv
+                          (lookup-static-class s-name))
+                        local-method-tenv))))
               (check-no-dups! f-names c-name)
-              (check-for-initialize! method-tenv c-name)
               (add-static-class-binding! c-name
-                (a-static-class (s-name f-names f-types method-tenv)))))))))
-
+                (a-static-class s-name f-names f-types method-tenv))))))))
+  
   (define method-decls->method-tenv
     (lambda (m-decls)
-      (map
+      (map 
         (lambda (m-decl)
           (cases method-decl m-decl
             (a-method-decl (result-type m-name arg-ids arg-types body)
@@ -112,65 +131,39 @@
 
   ;; new methods override old ones.  
   (define merge-method-tenvs
-    (lambda (super-tenv local-tenv)
-      (append local-tenv super-tenv)))
+    (lambda (super-tenv new-tenv)
+      (append new-tenv super-tenv)))
 
-  ;;;;;;;;;;;;;;;; extractors ;;;;;;;;;;;;;;;;
-
-  (define class-name->field-names
-    (lambda (c-name)
-      (cond
-        ((equal? c-name 'object) '())
-        (else
-          (static-class->field-names (lookup-static-class c-name))))))
-
-  (define class-name->field-types
-    (lambda (c-name)
-      (cond
-        ((equal? c-name 'object) '())
-        (else
-          (static-class->field-types (lookup-static-class c-name))))))
-
-  (define class-name->method-tenv
-    (lambda (c-name)
-      (cond
-        ((equal? 'object c-name) (eopl:error 'find-method "no method defined in object"))
-        (else
-          (static-class->method-tenv (lookup-static-class c-name))))))
-  
-  ;;;;;;;;;;;;;;;; selectors ;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;; selectors ;;;;;;;;;;;;;;;;
 
   (define static-class->super-name
     (lambda (sc)
       (cases static-class sc
-        (a-static-class (s-name f-names f-types m-tenv)
-          s-name))))
+        (a-static-class (super-name
+                          field-names field-types method-types)
+          super-name))))
 
   (define static-class->field-names
     (lambda (sc)
       (cases static-class sc
-        (a-static-class (s-name f-names f-types m-tenv)
-          f-names))))
+        (a-static-class (super-name
+                          field-names field-types method-types)
+          field-names))))
 
   (define static-class->field-types
     (lambda (sc)
       (cases static-class sc
-        (a-static-class (s-name f-names f-types m-tenv)
-          f-types))))
+        (a-static-class (super-name
+                          field-names field-types method-types)
+          field-types))))
 
   (define static-class->method-tenv
     (lambda (sc)
       (cases static-class sc
-        (a-static-class (s-name f-names f-types m-tenv)
-          m-tenv))))
+        (a-static-class (super-name
+                          field-names field-types method-tenv)
+          method-tenv))))
 
-  (define check-for-initialize!
-    (lambda (method-tenv class-name)
-      (when (not (maybe-find-method-type method-tenv 'initialize))
-        (eopl:error 'check-for-initialize!
-          "no initialize method in class ~s"
-          class-name))))
-  
   ;; Listof(SchemeVal) * SchemeVal -> Unspecified
   (define check-no-dups!
     (lambda (lst blamee)
@@ -181,7 +174,7 @@
            (eopl:error 'check-no-dups! "duplicate found among ~s in class ~s" lst
              blamee))
           (else (loop (cdr rest)))))))
-  
+
   (define check-no-shadowing!
     (lambda (super-f-names local-f-names blamee)
       (cond
@@ -189,10 +182,11 @@
         ((memv (car local-f-names) super-f-names)
          (eopl:error 'check-no-shadowing! "field name ~s redeclared in class ~s"
            (car local-f-names) blamee))
-        (else (check-no-shadowing! super-f-names (cdr local-f-names blamee))))))
+        (else (check-no-shadowing! super-f-names (cdr local-f-names) blamee)))))
 
   (define maybe
     (lambda (pred)
       (lambda (v)
-        (or (not v) (pred v)))))  
+        (or (not v) (pred v)))))
+
   )

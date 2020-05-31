@@ -46,28 +46,31 @@
        ("cast" expression identifier)
        cast-exp)
 
-      ;; the following expressions are only allowed in initialize
-
-      (expression
-       ("begin" expression (arbno ";" expression) "end")
-       begin-exp)
-
-      (expression
-       ("set" identifier "=" expression)
+      ;; the following expressions are only allowed in constructor
+      (cons-expression
+       ("set" expression "=" expression)
        assign-exp)
-
-      (expression                                
-       ("super" identifier    "("  (separated-list expression ",") ")")
-       super-call-exp)      
+      
+      (super-cons-expression
+       ("super" "(" (separated-list expression ",") ")")
+       super-exp)
 
       ;; declarations
 
       (class-decl
         ("class" identifier "extends" identifier "{"
            (arbno "field" type identifier)
+           constructor-decl
            (arbno method-decl)
          "}")
         a-class-decl)
+
+      (constructor-decl
+        ("constructor" "(" (separated-list identifier ":" type ",") ")" "{"
+           super-cons-expression
+           (arbno cons-expression)
+         "}")
+       a-constructor-decl)
 
       (method-decl
        ("method" type identifier
