@@ -49,5 +49,28 @@ send new pair(new a(), new b()) setfst(new b())
 
       ))
 
+  (define tests-for-run
+    '(
+      (test-a "
+class a extends object {
+  constructor () { super() }
+}
+new a()" )
+      
+      (test-ab "
+class a extends object {
+  field object f1
+  constructor (f1: object) {
+    super()
+    set access this f1 = f1
+  }
+}
+class b extends object {
+  constructor () { super() }
+}
+new a(new b())" )
+
+      ))
+
 
   )

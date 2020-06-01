@@ -4,6 +4,9 @@
   (require "lang.scm")                     ; for scan&parse
   (require "checker.scm")                  ; for type-of-program
   (require "tests.scm")                    ; for tests-for-check
+  (require "interp.scm")
+  (require "classes.scm")
+  (require "data-structures.scm")
 
   (provide check check-all)
 
@@ -37,7 +40,14 @@
                 (check (cadr test))))
           (else (eopl:error 'check-one "no such test: ~s" test-name))))))
 
-  (stop-after-first-error #t)
-  (check-all)
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+  (define run
+    (lambda (string)
+      (value-of-program (scan&parse string))))
+
+  
+  ;;(stop-after-first-error #t)
+  ;;(check-all)
   
   )
